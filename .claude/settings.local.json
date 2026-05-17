@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venv/Scripts/python.exe -m pip list)",
+      "Bash(python -m jupyter nbconvert --to notebook --execute defense_asst.ipynb --output /tmp/test.ipynb)",
+      "Bash(python3)",
+      "Bash(python -c ' *)",
+      "Bash(python -c \"import json, sys; nb=json.load\\(sys.stdin\\); [print\\(i, c.get\\('id','?'\\), c['cell_type'], \\(c['source'][0] if c['source'] else ''\\)[:80].replace\\(chr\\(10\\),' '\\)\\) for i,c in enumerate\\(nb['cells']\\)]\")",
+      "Bash(python _insert_section3.py)",
+      "Bash(python -c \"import json; nb=json.load\\(open\\('defense_asst.ipynb', encoding='utf-8'\\)\\); print\\('cells:', len\\(nb['cells']\\)\\); print\\('valid JSON OK'\\)\")",
+      "Bash(python3 -)",
+      "Bash(python -)",
+      "Bash(.venv/Scripts/python analyze_manzone_coverage_correlation.py)",
+      "Bash(git init *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git remote *)",
+      "Bash(git branch *)"
+    ]
+  }
+}
