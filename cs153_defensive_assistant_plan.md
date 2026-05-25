@@ -10,7 +10,7 @@ Build an assistant that recommends a defensive call for a given game situation b
 
 For this phase, the assistant only addresses **3rd/4th down snaps where the offense is actively trying to convert**. The primary optimization target is **low offensive EPA**; conversion prevention remains a key **evaluation** metric alongside EPA.
 
-**v0 (current implementation):** Tabular game state includes **timeouts remaining** for each team (`posteam_timeouts_remaining`, `defteam_timeouts_remaining`) and an explicit **`defense_is_home`** indicator (derived from `defteam` vs. `home_team`). **Weather** features (e.g. temperature, wind, precipitation, indoor/outdoor) are **not yet** included — wire these from play-by-play plus a schedule/weather join in a later version. Weather shapes pass/rush tradeoffs and remains a post-v0 gap.
+**v0 (current implementation):** Tabular game state includes **timeouts remaining** for each team (`posteam_timeouts_remaining`, `defteam_timeouts_remaining`) and an explicit `**defense_is_home`** indicator (derived from `defteam` vs. `home_team`). **Weather** features (e.g. temperature, wind, precipitation, indoor/outdoor) are **not yet included — wire these from play-by-play plus a schedule/weather join in a later version. Weather shapes pass/rush tradeoffs and remains a post-v0 gap.
 
 ## Scope Adjustment for 8 Weeks
 
@@ -93,7 +93,7 @@ Solid arrows: core path. Dotted: optional when time allows.
 **Layer responsibilities:**
 
 - **RF policy (frozen in Week 6):** Scores the finite candidate set from state, `off_personnel`, and in-game history. **Does not** ingest individual player skill or injury flags — that separation is intentional (observational policy vs. game-day context).
-- **InjuryContext builder:** Joins `nfl_data_py` injury reports, gameday inactives, weekly rosters, and depth charts to PBP via `**gsis_id`** (`offense_players` on each snap, aligned with `offense_names` / `offense_positions`); emits structured JSON (out / questionable / on-field / material absences).
+- **InjuryContext builder:** Joins `nfl_data_py` injury reports, gameday inactives, weekly rosters, and depth charts to PBP via `**gsis_id` (`offense_players` on each snap, aligned with `offense_names` / `offense_positions`); emits structured JSON (out / questionable / on-field / material absences).
 - **LLM coordinator:** Consumes top‑k RF candidates, history narrative, unpredictability signals, and `InjuryContext`. May **affirm** or **re-rank among the same candidates** when personnel reality diverges from what the tabular layer assumes. Output is constrained to the candidate set; overrides are logged.
 
 ## Eight-Week Timeline
@@ -174,11 +174,16 @@ Implement `build_injury_context(game_id, posteam, week, offense_players=None, of
 1. Join injuries + inactives + roster + depth for `(season, week, posteam)` on `**gsis_id**` (all sources use nflverse GSIS IDs).
 2. Parse `offense_players` (and aligned `offense_names` / `offense_positions`) into per-snap on-field lists; normalize ID strings before join.
 3. Compute **expected lineup** (starters from depth chart minus out/inactive) vs **observed lineup** (`offense_players` when present).
-4. Emit structured JSON, e.g.:
-  - `out`, `questionable` (with `source`: `inactive` | `report`)
-  - `on_field` (name, `gsis_id`, position, depth, `is_backup_for` when inferable)
-  - `material_absences` — filtered by severity heuristic (QB always material; WR/TE by target share or depth rank; OL by depth chart starter flag; optional usage weights from season PBP)
-5. Flag data QA mismatches (e.g. listed Out but `gsis_id` appears in `offense_players`) — exclude from LLM prompt, log for pipeline QA. Rows missing `offense_players` are excluded from replay evaluation or handled via explicit scenario `gsis_id` lists.
+4. Emit structured JSON framed for the **defensive coordinator** (opposing offense only):
+
+- `meta` — `opposing_offense`, `season`, `week`, `game_id`, `mode` (`replay` | `scenario`)
+- `out`, `questionable` — each entry tagged with `**is_material: bool`** (`depth_team == "1"` heuristic) inline, so the LLM can scan one list without a separate cross-reference; `source`: `inactive` | `report`
+- `on_field` — replay mode only; name, position, depth slot, `depth` (`starter` | `backup` | `unknown`)
+- `qa_flags` — pipeline-internal QA only (e.g. listed Out but appears in `offense_players`); **not forwarded to the LLM prompt**
+
+`material_absences` is no longer a separate top-level key — materiality is expressed via the `is_material` flag on each `out` / `questionable` entry.
+
+1. Flag data QA mismatches (e.g. listed Out but `gsis_id` appears in `offense_players`) — exclude from LLM prompt, log for pipeline QA. Rows missing `offense_players` are excluded from replay evaluation or handled via explicit scenario `gsis_id` lists.
 
 **Temporal modes:**
 
@@ -193,7 +198,7 @@ Implement `[src/llm/coordinator.py](src/llm/coordinator.py)` — **no Chroma req
 
 - Top‑k RF candidates with predicted EPA and λ-adjusted policy scores (from Weeks 4–5 `select_action` / `score_all_candidates`)
 - **Structured summary of the last five prior 3rd/4th-down defensive calls** on this defense in the game (narrative + unpredictability tie-break)
-- `InjuryContext` JSON (`material_absences`, on-field vs expected deltas)
+- `InjuryContext` JSON (opposing offense `out` / `questionable` with `is_material` flags; `on_field` in replay mode)
 - Game state fields already in the feature row (`down`, `ydstogo`, `yardline_100`, `score_differential`, `off_personnel`, etc.)
 
 **Behavior:**
@@ -215,10 +220,10 @@ Implement `[src/llm/coordinator.py](src/llm/coordinator.py)` — **no Chroma req
 #### Inference modes
 
 
-| Mode         | Use case                                                                                                                                  |
-| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| **Replay**   | Real test-row: `offense_players` from PBP + cached injury/inactive context                                                                |
-| **Scenario** | User specifies out/inactive `**gsis_id`** or depth-chart role (e.g. starter QB `gsis_id`) for Week 7 stress tests without a specific snap |
+| Mode         | Use case                                                                                                                                |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| **Replay**   | Real test-row: `offense_players` from PBP + cached injury/inactive context                                                              |
+| **Scenario** | User specifies out/inactive `**gsis_id` or depth-chart role (e.g. starter QB `gsis_id`) for Week 7 stress tests without a specific snap |
 
 
 Wire both in the end-to-end notebook/script.
@@ -243,14 +248,47 @@ Wire both in the end-to-end notebook/script.
 
 ## Core Deliverables
 
-- Data pipeline script: `[scripts/pull_pbp_data.py](scripts/pull_pbp_data.py)`
-- Cleaning/feature module: `[src/features/build_features.py](src/features/build_features.py)` (includes parsing/normalization of snap-level `offense_`* and `defense_*` player fields from Week 2 schema)
-- Model training pipeline: `[src/model/train_rf.py](src/model/train_rf.py)` (or renamed if architecture pivots)
-- Injury/roster context module: `[src/context/injury_context.py](src/context/injury_context.py)` (`build_injury_context`, cached `nfl_data_py` pulls)
-- Coordinator prompt logic: `[src/llm/coordinator.py](src/llm/coordinator.py)` (constrained output, override logging)
-- Optional RAG indexing/query module: `[src/rag/index_and_retrieve.py](src/rag/index_and_retrieve.py)` (**stretch only** — scouting/news corpus)
-- Optional demo app (stretch): `[app/streamlit_app.py](app/streamlit_app.py)`
-- Final report: `[docs/cs153_final_report.md](docs/cs153_final_report.md)`
+**Structure principle:** The notebook is the primary narrative and reproducible demo for Weeks 1–5 (already implemented). Extract **thin `src/` modules** only for Week 6 logic that benefits from isolation (injury joins, LLM coordinator). Full script-based pipelines are optional, not required for core completion.
+
+### Primary (in repo today or in progress)
+
+
+| Artifact                                                                             | Role                                                                                                                                                                                                                                   | Status           |
+| ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
+| `[defense_asst.ipynb](defense_asst.ipynb)`                                           | End-to-end pipeline: **§0** setup, **§1** ingestion/schema (Weeks 1–2), **§2** features + history (Week 3), **§3** RF policy engine (Weeks 4–5). Add **§4** qualitative layer (Week 6) as orchestration cells that import from `src/`. | §0–3 implemented |
+| `[analyze_manzone_coverage_correlation.py](analyze_manzone_coverage_correlation.py)` | One-off QA / analysis (e.g. `defense_man_zone_type` vs `defense_coverage_type` redundancy).                                                                                                                                            | Done             |
+| `[cs153_defensive_assistant_plan.md](cs153_defensive_assistant_plan.md)`             | Living project plan and evaluation tracker.                                                                                                                                                                                            | Ongoing          |
+
+
+### Week 6 — extract to `src/` (new)
+
+
+| Module                                                           | Role                                                                                                                  |
+| ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `[src/context/injury_context.py](src/context/injury_context.py)` | `build_injury_context`, cached `nfl_data_py` injury/inactive/roster pulls, parse `offense_players` + `gsis_id` joins. |
+| `[src/llm/coordinator.py](src/llm/coordinator.py)`               | Prompt, constrained output schema, override logging; called from notebook §4.                                         |
+
+
+**Optional shared helper** (extract only if reused by notebook + `injury_context`):
+
+- `[src/features/player_snap.py](src/features/player_snap.py)` — parse/normalize snap-level `offense_`* / `defense_*` lists from Week 2 schema.
+
+### Weeks 7–8
+
+
+| Artifact                                                   | Role                                                                                 |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `[docs/cs153_final_report.md](docs/cs153_final_report.md)` | Final write-up: methods, observational limits, metrics table, scenario walkthroughs. |
+| Notebook §4+                                               | Stress-test scenarios and policy-vs-LLM ablation (replay + scenario modes).          |
+
+
+### Optional / defer (stretch or if time allows)
+
+- `[scripts/pull_pbp_data.py](scripts/pull_pbp_data.py)` — CLI re-ingest without opening the notebook; not required while §1 remains reproducible.
+- `[src/model/train_rf.py](src/model/train_rf.py)` — standalone training entry point; not required while §3 trains and evaluates in-notebook.
+- `[src/rag/index_and_retrieve.py](src/rag/index_and_retrieve.py)` — Chroma + scouting corpus (**stretch**).
+- `[app/streamlit_app.py](app/streamlit_app.py)` — interactive demo (**stretch**).
+- Future: defensive injury/personnel context using persisted `defense_players` (see Stretch Goals).
 
 ## Evaluation Plan
 
@@ -280,12 +318,14 @@ Use this table as the single source of truth while iterating.
 | Policy quality          | Regret proxy (lower better)                                                   | Test split (2025 wk 16+)                       | Bucket baseline policy               | Policy RF v0           | RF: −0.076 **vs** Bucket: −0.236 *(bucket wins)*        | Lower than baseline                                              | Fail †      |
 | Predictability tradeoff | Repeat-rate on recent-history features                                        | Val split (2025 wk 11-15)                      | Lambda = 0 (42.4% repeat rate)       | Lambda = 0.033         | 7.1% **vs** 42.4% (~83% reduction)                      | Lower repeat-rate with minimal EPA loss                          | Pass        |
 | Predictability tradeoff | EPA delta from lambda (lambda > 0 minus lambda = 0)                           | Val split (2025 wk 11-15)                      | Lambda = 0 (mean pred EPA = −0.0165) | Lambda = 0.033         | +0.0065 (mean pred EPA = −0.0100; ~39% less negative)   | No material degradation                                          | Pass        |
-| LLM layer               | Override rate                                                                 | Scenario set + held-out sample                 | Policy-only                          | Policy + LLM v         |                                                         | Within expected band (e.g., 10-40%)                              | Pass / Fail |
-| LLM layer               | Override impact on EPA proxy                                                  | Same rows as above                             | Policy-only                          | Policy + LLM           | **_ vs _**                                              | Non-negative or justified tradeoff                               | Pass / Fail |
-| LLM layer               | Qualitative rubric score (1-5)                                                | Expert/scenario review (`n=`)                  | Policy-only rationale                | Policy + LLM rationale | **_ vs _**                                              | >= 4.0 average                                                   | Pass / Fail |
+| LLM layer               | Override rate                                                                 | n=6 (3 material, 3 no-material; §4.6)          | Policy-only                          | Policy + LLM v1        | **16.7%** overall (33.3% on material rows, 0.0% on no-material rows) | Within expected band (e.g., 10-40%)                              | Pass        |
+| LLM layer               | Override impact on EPA proxy                                                  | Same rows as above                             | Policy-only                          | Policy + LLM v1        | **+0.0364** mean, +0.0364 median (n=1 override) ‡                    | Small negatives or justified tradeoff                            | Fail ‡      |
+| LLM layer               | Qualitative rubric score (1-5)                                                | Expert/scenario review (n=6)                   | Policy-only rationale                | Policy + LLM v1        | **4.5 / 5**                                             | >= 4.0 average                                                   | Pass        |
 
 
 † **Regret proxy caveat:** The proxy rewards each recommended action by its *marginal* (global) mean EPA across all plays in the candidate set. The bucket baseline wins here because it conditions on very little — it frequently falls back to actions with the lowest global mean EPA regardless of situation. The RF conditions more carefully on state, so it recommends a contextually appropriate action that may not be the globally cheapest; the marginal-mean proxy penalises it for that. This is a limitation of the proxy, not evidence the RF is strategically worse.
+
+‡ **EPA delta caveat:** With only one override in n=6 rows, this metric has essentially no statistical weight. The single override (BUF@CLE, Jack Conklin + Wyatt Teller out) moved from pred_EPA −0.119 to −0.083 (+0.0364), meaning the LLM chose a candidate with slightly higher predicted EPA in exchange for an OL-specific interior-rush look — a situationally plausible tradeoff that the observational EPA proxy cannot fully evaluate. Re-run on a larger sample before drawing conclusions.
 
 #### Experiment Log Fields (fill each run)
 
@@ -306,7 +346,7 @@ Use this table as the single source of truth while iterating.
 - **Observational / non-causal estimates:** avoid claiming causal optimality; frame as best estimate from history.
 - **EPA vs unpredictability:** document λ and the “narrow EPA band” rule for the predictability penalty; tune so clear EPA winners are not discarded for variety alone.
 - **Injury report vs gameday reality:** practice reports (Questionable) disagree with inactives and snap-level `offense_players`; use inactives + on-field IDs for evaluation, reports for scenario mode; document in final report.
-- `**gsis_id` normalization:** coerce injury/roster/PBP IDs to one string format before joins; log rows where `offense_players` or `defense_players` is null or list lengths disagree across snap fields (`*_players`, `*_names`, `*_positions`).
+- `**gsis_id` normalization:_ coerce injury/roster/PBP IDs to one string format before joins; log rows where `offense_players` or `defense_players` is null or list lengths disagree across snap fields (`_\_players`, `_\_names`, `_\_positions`).
 - **LLM hallucination risk:** enforce constrained output schema; LLM may only cite injury facts present in `InjuryContext` JSON; log all overrides.
 - **RF vs LLM separation:** do not retrain RF on injuries in Week 6; ablation requires a frozen policy layer.
 - **Time compression:** prioritize policy model + evaluation; **UI is stretch only.**

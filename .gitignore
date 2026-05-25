@@ -1,0 +1,8 @@
+# Local secrets
+.env
+.env.*
+!.env.example
+
+# Python / notebook local artifacts
+__pycache__/
+.ipynb_checkpoints/
