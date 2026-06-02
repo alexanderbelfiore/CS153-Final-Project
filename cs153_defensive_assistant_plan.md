@@ -86,8 +86,6 @@ flowchart LR
   out -.-> optionalUI[Optional UI stretch goal]
 ```
 
-
-
 Solid arrows: core path. Dotted: optional when time allows.
 
 **Layer responsibilities:**
@@ -152,7 +150,6 @@ Solid arrows: core path. Dotted: optional when time allows.
 
 #### Data sources (`nfl_data_py`)
 
-
 | Source                                   | Role                                                                                                      |
 | ---------------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | `import_injuries()`                      | Weekly practice/game **reports** (Out / Doubtful / Questionable) — what coordinators likely knew pre-snap |
@@ -162,8 +159,7 @@ Solid arrows: core path. Dotted: optional when time allows.
 | PBP `offense_players`                    | Semicolon-separated **GSIS IDs on the field** for that snap (primary join key)                            |
 | PBP `offense_names`, `offense_positions` | Display names and positions, same order as `offense_players` (for LLM narrative)                          |
 
-
-PBP also persists `**defense_players`**, `**defense_names**`, `**defense_positions**` (from Week 2) for a future defensive injury/personnel context module; Week 6 v1 does not read them.
+PBP also persists `**defense_players`**, `**defense_names**`, `**defense_positions\*\*` (from Week 2) for a future defensive injury/personnel context module; Week 6 v1 does not read them.
 
 Cache per-season-week snapshots alongside PBP artifacts (same reproducibility pattern as Weeks 1–2).
 
@@ -177,7 +173,7 @@ Implement `build_injury_context(game_id, posteam, week, offense_players=None, of
 4. Emit structured JSON framed for the **defensive coordinator** (opposing offense only):
 
 - `meta` — `opposing_offense`, `season`, `week`, `game_id`, `mode` (`replay` | `scenario`)
-- `out`, `questionable` — each entry tagged with `**is_material: bool`** (`depth_team == "1"` heuristic) inline, so the LLM can scan one list without a separate cross-reference; `source`: `inactive` | `report`
+- `out`, `questionable` — each entry tagged with `**is_material: bool`\*\* (`depth_team == "1"` heuristic) inline, so the LLM can scan one list without a separate cross-reference; `source`: `inactive` | `report`
 - `on_field` — replay mode only; name, position, depth slot, `depth` (`starter` | `backup` | `unknown`)
 - `qa_flags` — pipeline-internal QA only (e.g. listed Out but appears in `offense_players`); **not forwarded to the LLM prompt**
 
@@ -187,7 +183,7 @@ Implement `build_injury_context(game_id, posteam, week, offense_players=None, of
 
 **Temporal modes:**
 
-- **Historical replay (evaluation):** Prefer `offense_players` + inactives as ground truth; injury reports document what was *known* entering the game.
+- **Historical replay (evaluation):** Prefer `offense_players` + inactives as ground truth; injury reports document what was _known_ entering the game.
 - **Scenario / pre-game demo:** Injury/inactive `gsis_id` lists and/or depth-chart starters; state uncertainty explicitly in the prompt when snap-level `offense_players` is absent.
 
 #### LLM coordinator
@@ -219,12 +215,10 @@ Implement `[src/llm/coordinator.py](src/llm/coordinator.py)` — **no Chroma req
 
 #### Inference modes
 
-
 | Mode         | Use case                                                                                                                                |
 | ------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
 | **Replay**   | Real test-row: `offense_players` from PBP + cached injury/inactive context                                                              |
 | **Scenario** | User specifies out/inactive `**gsis_id` or depth-chart role (e.g. starter QB `gsis_id`) for Week 7 stress tests without a specific snap |
-
 
 Wire both in the end-to-end notebook/script.
 
@@ -252,35 +246,29 @@ Wire both in the end-to-end notebook/script.
 
 ### Primary (in repo today or in progress)
 
-
 | Artifact                                                                             | Role                                                                                                                                                                                                                                   | Status           |
 | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
 | `[defense_asst.ipynb](defense_asst.ipynb)`                                           | End-to-end pipeline: **§0** setup, **§1** ingestion/schema (Weeks 1–2), **§2** features + history (Week 3), **§3** RF policy engine (Weeks 4–5). Add **§4** qualitative layer (Week 6) as orchestration cells that import from `src/`. | §0–3 implemented |
 | `[analyze_manzone_coverage_correlation.py](analyze_manzone_coverage_correlation.py)` | One-off QA / analysis (e.g. `defense_man_zone_type` vs `defense_coverage_type` redundancy).                                                                                                                                            | Done             |
 | `[cs153_defensive_assistant_plan.md](cs153_defensive_assistant_plan.md)`             | Living project plan and evaluation tracker.                                                                                                                                                                                            | Ongoing          |
 
-
 ### Week 6 — extract to `src/` (new)
-
 
 | Module                                                           | Role                                                                                                                  |
 | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | `[src/context/injury_context.py](src/context/injury_context.py)` | `build_injury_context`, cached `nfl_data_py` injury/inactive/roster pulls, parse `offense_players` + `gsis_id` joins. |
 | `[src/llm/coordinator.py](src/llm/coordinator.py)`               | Prompt, constrained output schema, override logging; called from notebook §4.                                         |
 
-
 **Optional shared helper** (extract only if reused by notebook + `injury_context`):
 
-- `[src/features/player_snap.py](src/features/player_snap.py)` — parse/normalize snap-level `offense_`* / `defense_*` lists from Week 2 schema.
+- `[src/features/player_snap.py](src/features/player_snap.py)` — parse/normalize snap-level `offense_`_ / `defense\__` lists from Week 2 schema.
 
 ### Weeks 7–8
-
 
 | Artifact                                                   | Role                                                                                 |
 | ---------------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | `[docs/cs153_final_report.md](docs/cs153_final_report.md)` | Final write-up: methods, observational limits, metrics table, scenario walkthroughs. |
 | Notebook §4+                                               | Stress-test scenarios and policy-vs-LLM ablation (replay + scenario modes).          |
-
 
 ### Optional / defer (stretch or if time allows)
 
@@ -308,22 +296,20 @@ Wire both in the end-to-end notebook/script.
 
 Use this table as the single source of truth while iterating.
 
+| Category                | Metric                                                                        | Dataset / Split                                | Baseline                             | Model Variant    | Result                                                               | Target / Decision Rule                                           | Status |
+| ----------------------- | ----------------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------ | ---------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------- | ------ |
+| Filter QA               | % sampled rows that satisfy scope filters                                     | Manual audit sample (`n=150`)                  | N/A                                  | Data pipeline v0 | 150/150 (100%)                                                       | >= 98% valid rows                                                | Pass   |
+| Filter QA               | Penalty edge-case correctness (DPI, defensive holding, intentional grounding) | All penalty plays in raw data (`n=1064` focal) | N/A                                  | Data pipeline v0 | 380/380 eligible included; 6120/6120 non-focal excluded              | 100% of checked focal-penalty rows match post-enforcement labels | Pass   |
+| Policy quality          | EPA MAE (lower better)                                                        | Test split (2025 wk 16+)                       | Down-distance-field bucket baseline  | Policy RF v0     | RF: 1.7180 **vs** Bucket: 1.7305                                     | Beat baseline by >= 0.7%                                         | Pass   |
+| Policy quality          | Candidate ranking quality (top-k hit / NDCG / pairwise accuracy)              | Test split (2025 wk 16+)                       | Bucket baseline ranking              | Policy RF v0     | **RF: 20.5% vs Bucket: 2.4% for top 3 hit rate**                     | Improvement over baseline                                        | Pass   |
+| Policy quality          | Regret proxy (lower better)                                                   | Test split (2025 wk 16+)                       | Bucket baseline policy               | Policy RF v0     | RF: −0.076 **vs** Bucket: −0.236 _(bucket wins)_                     | Lower than baseline                                              | Fail † |
+| Predictability tradeoff | Repeat-rate on recent-history features                                        | Val split (2025 wk 11-15)                      | Lambda = 0 (42.4% repeat rate)       | Lambda = 0.033   | 7.1% **vs** 42.4% (~83% reduction)                                   | Lower repeat-rate with minimal EPA loss                          | Pass   |
+| Predictability tradeoff | EPA delta from lambda (lambda > 0 minus lambda = 0)                           | Val split (2025 wk 11-15)                      | Lambda = 0 (mean pred EPA = −0.0165) | Lambda = 0.033   | +0.0065 (mean pred EPA = −0.0100; ~39% less negative)                | No material degradation                                          | Pass   |
+| LLM layer               | Override rate                                                                 | n=6 (3 material, 3 no-material; §4.6)          | Policy-only                          | Policy + LLM v1  | **16.7%** overall (33.3% on material rows, 0.0% on no-material rows) | Within expected band (e.g., 10-40%)                              | Pass   |
+| LLM layer               | Override impact on EPA proxy                                                  | Same rows as above                             | Policy-only                          | Policy + LLM v1  | **+0.0364** mean, +0.0364 median (n=1 override) ‡                    | Small negatives or justified tradeoff                            | Fail ‡ |
+| LLM layer               | Qualitative rubric score (1-5)                                                | Expert/scenario review (n=6)                   | Policy-only rationale                | Policy + LLM v1  | **4.5 / 5**                                                          | >= 4.0 average                                                   | Pass   |
 
-| Category                | Metric                                                                        | Dataset / Split                                | Baseline                             | Model Variant          | Result                                                  | Target / Decision Rule                                           | Status      |
-| ----------------------- | ----------------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------ | ---------------------- | ------------------------------------------------------- | ---------------------------------------------------------------- | ----------- |
-| Filter QA               | % sampled rows that satisfy scope filters                                     | Manual audit sample (`n=150`)                  | N/A                                  | Data pipeline v0       | 150/150 (100%)                                          | >= 98% valid rows                                                | Pass        |
-| Filter QA               | Penalty edge-case correctness (DPI, defensive holding, intentional grounding) | All penalty plays in raw data (`n=1064` focal) | N/A                                  | Data pipeline v0       | 380/380 eligible included; 6120/6120 non-focal excluded | 100% of checked focal-penalty rows match post-enforcement labels | Pass        |
-| Policy quality          | EPA MAE (lower better)                                                        | Test split (2025 wk 16+)                       | Down-distance-field bucket baseline  | Policy RF v0           | RF: 1.7180 **vs** Bucket: 1.7305                        | Beat baseline by >= 0.7%                                         | Pass        |
-| Policy quality          | Candidate ranking quality (top-k hit / NDCG / pairwise accuracy)              | Test split (2025 wk 16+)                       | Bucket baseline ranking              | Policy RF v0           | **RF: 20.5% vs Bucket: 2.4% for top 3 hit rate**        | Improvement over baseline                                        | Pass        |
-| Policy quality          | Regret proxy (lower better)                                                   | Test split (2025 wk 16+)                       | Bucket baseline policy               | Policy RF v0           | RF: −0.076 **vs** Bucket: −0.236 *(bucket wins)*        | Lower than baseline                                              | Fail †      |
-| Predictability tradeoff | Repeat-rate on recent-history features                                        | Val split (2025 wk 11-15)                      | Lambda = 0 (42.4% repeat rate)       | Lambda = 0.033         | 7.1% **vs** 42.4% (~83% reduction)                      | Lower repeat-rate with minimal EPA loss                          | Pass        |
-| Predictability tradeoff | EPA delta from lambda (lambda > 0 minus lambda = 0)                           | Val split (2025 wk 11-15)                      | Lambda = 0 (mean pred EPA = −0.0165) | Lambda = 0.033         | +0.0065 (mean pred EPA = −0.0100; ~39% less negative)   | No material degradation                                          | Pass        |
-| LLM layer               | Override rate                                                                 | n=6 (3 material, 3 no-material; §4.6)          | Policy-only                          | Policy + LLM v1        | **16.7%** overall (33.3% on material rows, 0.0% on no-material rows) | Within expected band (e.g., 10-40%)                              | Pass        |
-| LLM layer               | Override impact on EPA proxy                                                  | Same rows as above                             | Policy-only                          | Policy + LLM v1        | **+0.0364** mean, +0.0364 median (n=1 override) ‡                    | Small negatives or justified tradeoff                            | Fail ‡      |
-| LLM layer               | Qualitative rubric score (1-5)                                                | Expert/scenario review (n=6)                   | Policy-only rationale                | Policy + LLM v1        | **4.5 / 5**                                             | >= 4.0 average                                                   | Pass        |
-
-
-† **Regret proxy caveat:** The proxy rewards each recommended action by its *marginal* (global) mean EPA across all plays in the candidate set. The bucket baseline wins here because it conditions on very little — it frequently falls back to actions with the lowest global mean EPA regardless of situation. The RF conditions more carefully on state, so it recommends a contextually appropriate action that may not be the globally cheapest; the marginal-mean proxy penalises it for that. This is a limitation of the proxy, not evidence the RF is strategically worse.
+† **Regret proxy caveat:** The proxy rewards each recommended action by its _marginal_ (global) mean EPA across all plays in the candidate set. The bucket baseline wins here because it conditions on very little — it frequently falls back to actions with the lowest global mean EPA regardless of situation. The RF conditions more carefully on state, so it recommends a contextually appropriate action that may not be the globally cheapest; the marginal-mean proxy penalises it for that. This is a limitation of the proxy, not evidence the RF is strategically worse.
 
 ‡ **EPA delta caveat:** With only one override in n=6 rows, this metric has essentially no statistical weight. The single override (BUF@CLE, Jack Conklin + Wyatt Teller out) moved from pred_EPA −0.119 to −0.083 (+0.0364), meaning the LLM chose a candidate with slightly higher predicted EPA in exchange for an OL-specific interior-rush look — a situationally plausible tradeoff that the observational EPA proxy cannot fully evaluate. Re-run on a larger sample before drawing conclusions.
 
@@ -358,4 +344,3 @@ Use this table as the single source of truth while iterating.
 - Add simple what-if simulator for substitution changes (extends Week 6 scenario mode).
 - **Defensive injury / personnel LLM layer:** mirror Week 6 `InjuryContext` for `defteam` using persisted `defense_players` + injury/inactive/roster joins (e.g. star CB or pass rusher out); extend coordinator to reason over both sides of the ball.
 - Lock a retrieval corpus (scouting/news) and full **Chroma + RAG** path (not required for core Week 6).
-

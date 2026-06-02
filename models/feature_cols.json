@@ -1,0 +1,57 @@
+{
+  "ALL_FEATURES": [
+    "down",
+    "ydstogo",
+    "yardline_100",
+    "score_differential",
+    "game_seconds_remaining",
+    "def_seq_idx",
+    "hist_n",
+    "hist_nickel_count",
+    "hist_dime_count",
+    "hist_base_count",
+    "hist_man_count",
+    "hist_zone_count",
+    "hist_max_personnel_repeat",
+    "hist_max_manzone_repeat",
+    "same_personnel_as_prev",
+    "same_manzone_as_prev",
+    "same_coverage_as_prev",
+    "off_personnel",
+    "def_personnel",
+    "defense_coverage_type"
+  ],
+  "NUMERIC_STATE_FEATURES": [
+    "down",
+    "ydstogo",
+    "yardline_100",
+    "score_differential",
+    "game_seconds_remaining",
+    "def_seq_idx",
+    "hist_n",
+    "hist_nickel_count",
+    "hist_dime_count",
+    "hist_base_count",
+    "hist_man_count",
+    "hist_zone_count",
+    "hist_max_personnel_repeat",
+    "hist_max_manzone_repeat",
+    "same_personnel_as_prev",
+    "same_manzone_as_prev",
+    "same_coverage_as_prev"
+  ],
+  "ALL_CATEGORICAL": [
+    "off_personnel",
+    "def_personnel",
+    "defense_coverage_type"
+  ],
+  "ACTION_COMPONENTS": [
+    "def_personnel",
+    "defense_coverage_type"
+  ],
+  "CANDIDATE_KEYS": [
+    "def_personnel",
+    "defense_man_zone_type",
+    "defense_coverage_type"
+  ]
+}
